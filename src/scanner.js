@@ -243,7 +243,7 @@ export function isDevProcess(processName, command) {
   const name = (processName || "").toLowerCase();
   const cmd = (command || "").toLowerCase();
 
-  // Known system/desktop apps — not dev servers
+  // Known system/desktop apps — not dev processes
   const systemApps = [
     "spotify",
     "raycast",
@@ -259,6 +259,7 @@ export function isDevProcess(processName, command) {
     "discord",
     "firefox",
     "chrome",
+    "google",
     "safari",
     "figma",
     "notion",
@@ -268,13 +269,29 @@ export function isDevProcess(processName, command) {
     "iterm2",
     "warp",
     "arc",
+    "loginwindow",
+    "windowserver",
+    "systemuise",
+    "kernel_task",
+    "launchd",
+    "mdworker",
+    "mds_stores",
+    "cfprefsd",
+    "coreaudio",
+    "corebrightne",
+    "airportd",
+    "bluetoothd",
+    "sharingd",
+    "usernoted",
+    "notificationc",
+    "cloudd",
   ];
   for (const app of systemApps) {
     if (name.toLowerCase().startsWith(app)) return false;
   }
 
-  // Dev runtimes, servers, and infra
-  const devIndicators = [
+  // Dev process names (exact match on basename)
+  const devNames = new Set([
     "node",
     "python",
     "python3",
@@ -289,17 +306,54 @@ export function isDevProcess(processName, command) {
     "gunicorn",
     "flask",
     "rails",
-    "webpack",
-    "vite",
-    "next",
-    "nuxt",
-    "remix",
-    "astro",
-    "docker",
-    "com.docke",
+    "npm",
+    "npx",
+    "yarn",
+    "pnpm",
+    "tsc",
+    "tsx",
+    "esbuild",
+    "rollup",
+    "turbo",
+    "nx",
+    "jest",
+    "vitest",
+    "mocha",
+    "pytest",
+    "cypress",
+    "playwright",
+    "rustc",
+    "dotnet",
+    "gradle",
+    "mvn",
+    "mix",
+    "elixir",
+  ]);
+  if (devNames.has(name)) return true;
+
+  // Docker processes (prefix match)
+  if (name.startsWith("com.docke") || name === "docker" || name === "docker-sandbox") return true;
+
+  // Command-line keyword matching (only match as whole words or clear prefixes)
+  const cmdIndicators = [
+    /\bnode\b/,
+    /\bnext[\s-]/,
+    /\bvite\b/,
+    /\bnuxt\b/,
+    /\bwebpack\b/,
+    /\bremix\b/,
+    /\bastro\b/,
+    /\bgulp\b/,
+    /\bng serve\b/,
+    /\bgatsb/,
+    /\bflask\b/,
+    /\bdjango\b|manage\.py/,
+    /\buvicorn\b/,
+    /\brails\b/,
+    /\bcargo\b/,
   ];
-  for (const dev of devIndicators) {
-    if (name === dev || cmd.includes(dev)) return true;
+  for (const re of cmdIndicators) {
+    if (re.test(cmd)) return true;
   }
 
   return false;
@@ -460,6 +514,127 @@ function getProcessTree(pid) {
     }
   } catch {}
   return tree;
+}
+
+/**
+ * Extract a short, human-readable description from a full command string.
+ */
+function summarizeCommand(command, processName) {
+  const cmd = command || "";
+
+  // For scripts with arguments, show the meaningful part
+  // e.g. "node /Users/foo/project/server.js --port 3000" -> "server.js"
+  // e.g. "/usr/bin/python3 manage.py runserver" -> "manage.py runserver"
+  const parts = cmd.split(/\s+/);
+  const meaningful = [];
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    // Skip the binary path itself
+    if (i === 0) continue;
+    // Skip flags
+    if (part.startsWith("-")) continue;
+    // Get basename of file paths
+    if (part.includes("/")) {
+      meaningful.push(basename(part));
+    } else {
+      meaningful.push(part);
+    }
+    if (meaningful.length >= 3) break;
+  }
+
+  if (meaningful.length > 0) return meaningful.join(" ");
+
+  // Fallback: use the binary basename
+  return processName;
+}
+
+/**
+ * Get all running processes (like ps aux but structured).
+ * Used by `ports ps` command.
+ */
+export function getAllProcesses() {
+  let raw;
+  try {
+    raw = execSync(
+      "ps -eo pid=,pcpu=,pmem=,rss=,lstart=,command= 2>/dev/null",
+      { encoding: "utf8", timeout: 5000 },
+    ).trim();
+  } catch {
+    return [];
+  }
+
+  const entries = [];
+  const seen = new Set();
+
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    const m = line
+      .trim()
+      .match(
+        /^(\d+)\s+([\d.]+)\s+([\d.]+)\s+(\d+)\s+\w+\s+(\w+\s+\d+\s+[\d:]+\s+\d+)\s+(.*)$/,
+      );
+    if (!m) continue;
+
+    const pid = parseInt(m[1], 10);
+    if (pid <= 1 || pid === process.pid || seen.has(pid)) continue;
+    seen.add(pid);
+
+    const command = m[6];
+    const processName = basename(command.split(/\s+/)[0]);
+
+    entries.push({
+      pid,
+      processName,
+      cpu: parseFloat(m[2]),
+      memPercent: parseFloat(m[3]),
+      rss: parseInt(m[4], 10),
+      lstart: m[5],
+      command,
+    });
+  }
+
+  // Batch cwd lookup — only for non-Docker processes (Docker cwd is useless)
+  const nonDockerEntries = entries.filter(
+    (e) => !e.processName.startsWith("com.docke") &&
+           !e.processName.startsWith("Docker") &&
+           e.processName !== "docker" &&
+           e.processName !== "docker-sandbox",
+  );
+  const cwdMap = batchCwd(nonDockerEntries.map((e) => e.pid));
+
+  return entries.map((e) => {
+    const cwd = cwdMap.get(e.pid);
+    const info = {
+      pid: e.pid,
+      processName: e.processName,
+      command: e.command,
+      description: summarizeCommand(e.command, e.processName),
+      cpu: e.cpu,
+      memory: e.rss > 0 ? formatMemory(e.rss) : null,
+      cwd: null,
+      projectName: null,
+      framework: null,
+      uptime: null,
+    };
+
+    if (e.lstart) {
+      const startTime = new Date(e.lstart);
+      if (!isNaN(startTime.getTime())) {
+        info.uptime = formatUptime(Date.now() - startTime.getTime());
+      }
+    }
+
+    info.framework = detectFrameworkFromCommand(e.command, e.processName);
+
+    if (cwd) {
+      const projectRoot = findProjectRoot(cwd);
+      info.cwd = projectRoot;
+      info.projectName = basename(projectRoot);
+      info.framework = info.framework || detectFramework(projectRoot);
+    }
+
+    return info;
+  });
 }
 
 export function findOrphanedProcesses() {

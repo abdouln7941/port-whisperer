@@ -186,6 +186,94 @@ export function displayPortTable(ports, filtered = false) {
 }
 
 /**
+ * Display all processes in a table (ports ps)
+ */
+export function displayProcessTable(processes, filtered = false) {
+  renderHeader();
+
+  if (processes.length === 0) {
+    console.log(chalk.gray("  No dev processes found.\n"));
+    console.log(
+      chalk.gray("  Run ") +
+        chalk.cyan("ports ps --all") +
+        chalk.gray(" to show all processes.\n"),
+    );
+    return;
+  }
+
+  const table = new Table({
+    chars: {
+      top: "─",
+      "top-mid": "┬",
+      "top-left": "┌",
+      "top-right": "┐",
+      bottom: "─",
+      "bottom-mid": "┴",
+      "bottom-left": "└",
+      "bottom-right": "┘",
+      left: "│",
+      "left-mid": "├",
+      mid: "─",
+      "mid-mid": "┼",
+      right: "│",
+      "right-mid": "┤",
+      middle: "│",
+    },
+    style: {
+      head: [],
+      border: ["gray"],
+      "padding-left": 1,
+      "padding-right": 1,
+    },
+    head: [
+      chalk.cyan.bold("PID"),
+      chalk.cyan.bold("PROCESS"),
+      chalk.cyan.bold("CPU%"),
+      chalk.cyan.bold("MEM"),
+      chalk.cyan.bold("PROJECT"),
+      chalk.cyan.bold("FRAMEWORK"),
+      chalk.cyan.bold("UPTIME"),
+      chalk.cyan.bold("WHAT"),
+    ],
+  });
+
+  for (const p of processes) {
+    const cpuStr = p.cpu.toFixed(1);
+    let cpuColored;
+    if (p.cpu > 25) cpuColored = chalk.red(cpuStr);
+    else if (p.cpu > 5) cpuColored = chalk.yellow(cpuStr);
+    else cpuColored = chalk.green(cpuStr);
+
+    table.push([
+      chalk.gray(String(p.pid)),
+      chalk.white.bold(truncate(p.processName, 15)),
+      cpuColored,
+      p.memory ? chalk.green(p.memory) : chalk.gray("—"),
+      p.projectName
+        ? chalk.blue(truncate(p.projectName, 20))
+        : chalk.gray("—"),
+      formatFramework(p.framework),
+      p.uptime ? chalk.yellow(p.uptime) : chalk.gray("—"),
+      chalk.gray(truncate(p.description || p.processName, 30)),
+    ]);
+  }
+
+  console.log(table.toString());
+  console.log();
+  const allHint = filtered
+    ? chalk.gray("  ·  ") +
+      chalk.cyan("--all") +
+      chalk.gray(" to show everything")
+    : "";
+  console.log(
+    chalk.gray(
+      `  ${processes.length} process${processes.length === 1 ? "" : "es"}`,
+    ) + allHint,
+  );
+  console.log();
+}
+
+/**
  * Display detailed info for a single port
  */
 export function displayPortDetail(info) {
